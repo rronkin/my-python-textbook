@@ -1,12 +1,14 @@
 # The Python Architecture: Why It Works So Elegantly
 
-Oct 27, 2026 · @Roee Ronkin
+Updated Oct 31, 2026 · @Roee Ronkin
 
 *From C-structs to elegant protocols in high-performance DSP.*
 
 Much of Python's elegance comes from one design decision. The syntax is fixed, but what the syntax *does* is decided by your objects. This guide follows that decision and how CPython implements it, for engineers coming to Python from MATLAB, C and DSP work. Section 12 covers what the design costs.
 
 The code examples assume `import numpy as np`. Where they use `time` or CuPy, they also assume `import time` and `import cupy as cp`.
+
+Found a mistake? [Open an issue](https://github.com/rronkin/my-python-textbook/issues).
 
 ## 1. The Core Philosophy: Fixed Syntax, Pluggable Behavior
 
