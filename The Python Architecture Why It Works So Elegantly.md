@@ -4,13 +4,15 @@ Oct 27, 2026 · @Roee Ronkin
 
 *From C-structs to elegant protocols in high-performance DSP.*
 
-Python's elegance comes from one design decision. The syntax is fixed, but what the syntax *does* is decided by your objects. Everything else in this document follows from that decision and from how CPython implements it.
+Much of Python's elegance comes from one design decision. The syntax is fixed, but what the syntax *does* is decided by your objects. This guide follows that decision and how CPython implements it, for engineers coming to Python from MATLAB, C and DSP work. Section 12 covers what the design costs.
 
 The code examples assume `import numpy as np`. Where they use `time` or CuPy, they also assume `import time` and `import cupy as cp`.
 
 ## 1. The Core Philosophy: Fixed Syntax, Pluggable Behavior
 
-Python's keywords and operators are hardcoded in the grammar, like any language. What is unusual is that almost every piece of syntax is defined as a call to a named method on the object. These methods are the "dunder" (Double UNDERscore) methods. A set of dunders that together give an object a capability is called a **protocol**.
+Python's keywords and operators are hardcoded in the grammar, like any language. But most of that syntax is defined as a call to a named method on the object. These methods are the "dunder" (Double UNDERscore) methods. A set of dunders that together give an object a capability is called a **protocol**.
+
+Python did not invent this. C++ and C# overload operators, and Ruby and Smalltalk go further by treating nearly every operation as a method call. Python's strength is how much of the language it brings under one documented set of protocols, and how little a class must declare to join in.
 
 So when the language needed to grow, its designers rarely added special cases. They added protocols.
 
@@ -42,7 +44,7 @@ sorted(r), max(r)   # [1, 2, 3], 3
 
 Decorators are a different mechanism. They are not a protocol. They are syntax for passing a function object into another function, which is possible because functions are ordinary objects (Section 4).
 
-The trade-off is **dynamic lookup overhead**. Every `+` or `[]` costs a method lookup at runtime. In return, a custom hardware-simulation block can behave exactly like a native Python type.
+The trade-off is **dynamic dispatch overhead**. Every `+` or `[]` has to find and call the right method at runtime, where compiled C often needs a single machine instruction. In return, a custom hardware-simulation block can behave exactly like a native Python type.
 
 ## 2. Under the Hood: The C-Struct Architecture
 
@@ -68,7 +70,7 @@ This is the layout of the default build. The newer free-threaded build (3.13+) a
 
 ## 3. The Grand Unification: Two Pillars and a Keystone
 
-Strip away the syntax, libraries and ecosystem, and Python rests on two pillars. A third mechanism, descriptors, is the keystone that joins them. Namespaces are the mortar. These mechanisms are defined in terms of each other, so some terms appear before their full explanation. This circularity is part of why the design is so compact: a few ideas, each built from the others.
+Strip away the syntax, libraries and ecosystem, and Python rests on two pillars. A third mechanism, descriptors, is the keystone that joins them. Namespaces underlie all of it. These mechanisms are defined in terms of each other, so some terms appear before their full explanation. This circularity is part of why the design is so compact: a few ideas, each built from the others.
 
 ### Pillar 1: The Data Model (Protocols and Dunders) → Behavior
 
@@ -201,7 +203,7 @@ There is no special "method" machinery in the language. `self` is filled in by a
 
 Section 9 uses a descriptor to build MATLAB-style nontunable properties in about a dozen lines. A nontunable property is one that is locked once the object starts running.
 
-### The Mortar: Namespaces
+### Underneath It All: Namespaces
 
 Module globals, class bodies and ordinary instances store their names in dictionaries. You can see them with `vars(obj)`, and you can change them at runtime. For a class, `vars()` returns a read-only view, so write with `setattr(cls, name, value)` instead. This is what makes Python so malleable: a name is a string key that points to a first-class object.
 
@@ -290,7 +292,7 @@ Buf.__len__ = lambda self: 4
 len(b)                         # 4
 ```
 
-This is deliberate. The interpreter can cache each type's sockets in fixed C slots on the type struct (`ob_type` from Section 2). So `len(b)` becomes a direct C function-pointer call, not a dictionary search. Plugin flexibility and fast dispatch come from the same design.
+This is deliberate. The interpreter can cache each type's sockets in fixed C slots on the type struct (`ob_type` from Section 2). So `len(b)` goes straight to a C function pointer on the type and never searches the instance's dict. For a type written in C, that pointer is the implementation. For a class written in Python, it is a small wrapper that finds and calls your `__len__`, which is slower. Plugin flexibility and fast dispatch for built-in types come from the same design.
 
 ### Implicit registration via duck typing
 
@@ -427,7 +429,7 @@ The same object can be supplier and client at once. A block that implements `__i
 
 ## 8. The Golden Rule of Dunders
 
-You should almost never call a dunder method directly. Writing `my_buffer.__len__()` or `sig_a.__add__(sig_b)` is a red flag. Wire the dunders into the back of the object, close the panel, and let the interpreter press the buttons on the front with native syntax: `len(my_buffer)` or `sig_a + sig_b`.
+You should almost never call a dunder method directly. Writing `my_buffer.__len__()` or `sig_a.__add__(sig_b)` is a red flag. Define the dunders on the class, then use native syntax and let the interpreter call them: `len(my_buffer)` or `sig_a + sig_b`.
 
 Calling through the syntax is also more correct. `sig_a + sig_b` runs the full negotiation from Section 6, including the fallback to `sig_b.__radd__`. A direct `sig_a.__add__(sig_b)` call skips it and can return `NotImplemented` instead of a result.
 
@@ -660,11 +662,23 @@ Three protocols cooperate here, and none of them is visible in the client loop.
 
 ## 11. Performance Reality: Python vs. MATLAB
 
-For vectorized work, NumPy and SciPy are competitive with MATLAB. Both are high-level wrappers around the same compiled linear-algebra libraries (BLAS, LAPACK, Intel MKL or OpenBLAS).
+The comparisons with MATLAB in this section are rules of thumb, not measurements. The Python timings are measured, on one machine, so treat them as orders of magnitude and time your own workload.
+
+For vectorized work, NumPy and SciPy are generally competitive with MATLAB. Both are high-level wrappers around the same kinds of compiled linear-algebra libraries (BLAS, LAPACK, Intel MKL or OpenBLAS).
 
 **Where the overhead hides.** Every NumPy call has a fixed cost on the order of a microsecond, for argument parsing and dispatch. On a 1M-sample array this is negligible. On a 4-sample array inside a loop, it dominates. Sample-by-sample GNSS code usually hits this wall before anything else.
 
-**Loops.** MATLAB's JIT compiles plain loops reasonably well. CPython does not, so tight per-sample loops need explicit compilation:
+| Operation | Measured time |
+| --- | --- |
+| `np.add` on 4 samples | 0.6 µs |
+| `np.sum` on 4 samples | 2.4 µs |
+| `np.add` on 1M samples | 2.8 ms |
+| One-pole IIR filter over 1M samples, plain Python loop | 300 ms |
+| The same loop with Numba's `@njit`, after compilation | 4.5 ms |
+
+These are best-of-several runs on Windows with an Intel CPU, using Python 3.12.3, NumPy 2.5.4 and Numba 0.68.1.
+
+**Loops.** MATLAB's JIT compiles plain loops reasonably well. CPython has a specializing interpreter (3.11+) and an experimental JIT (first shipped in 3.13), but neither comes close to compiled code on numeric loops. In the table above, Numba runs the same loop about 65 times faster. Tight per-sample loops therefore need explicit compilation:
 
 - **Numba (`@njit`):** Just-in-time (JIT) compilation of a Python function to machine code. The function is compiled on its first call, specialized to the actual argument types. Best for CPU loops over NumPy arrays.
 - **CuPy:** A near drop-in NumPy replacement that runs on NVIDIA GPUs through CUDA.
@@ -684,9 +698,23 @@ power(cp.ones(1000))     # runs on the GPU, returns a CuPy array
 
 `power` never mentions the GPU. NumPy sees a CuPy array and hands the call to CuPy. This works only for functions CuPy implements; for the rest, NumPy raises an error instead of silently copying to the CPU.
 
-A rewrite in C++ or Rust is only needed for bare-metal embedded targets, hard real-time latency, or tight RAM limits where per-object overhead matters. Offline GNSS simulation and signal generation can be done entirely in Python.
+A rewrite in C++ or Rust is usually only needed for bare-metal embedded targets, hard real-time latency, or tight RAM limits where per-object overhead matters. Offline GNSS simulation and signal generation can often be done entirely in Python.
 
-## 12. Epilogue: Why "Data Model"?
+## 12. What the Design Costs
+
+Everything in this guide has a price, and other languages make different trades for good reasons.
+
+- **Speed.** Runtime dispatch on every operation is why plain Python loops are slow (Section 11).
+- **Memory.** Every value is a full object (Section 2). A Python `float` takes 24 bytes to hold 8 bytes of data. A list of 1M floats takes about 32 MB, while a NumPy array of the same values takes 8 MB.
+- **Threads and the GIL.** The default CPython build has a Global Interpreter Lock (GIL), so only one thread runs Python bytecode at a time. Among other things, it keeps updates to `ob_refcnt` safe. Threads therefore do not speed up CPU-bound Python code. NumPy releases the GIL during many operations, and `multiprocessing` sidesteps it at the cost of moving data between processes. The free-threaded build (3.13+) removes the GIL, but it is slower on a single thread and depends on extension modules supporting it.
+- **Late errors.** With duck typing, a missing method or wrong type surfaces only when that line runs, possibly hours into a simulation. Type checkers catch many of these errors (Section 10), but nothing enforces them at runtime.
+- **Hidden behavior.** `a * b` can do anything: allocate memory, run a slow Python loop, or move work to a GPU. The syntax does not reveal the cost. Because almost anything can change at runtime (Section 3), compilers and analysis tools can assume very little either.
+- **Limits of the plugin model.** `is` and plain name assignment cannot be overloaded. `and`, `or` and `not` can only consult `__bool__`. That is why NumPy uses `&`, `|` and `~` for element-wise logic, and why `a and b` on multi-element arrays raises `ValueError`.
+- **Accumulated rules.** The design is compact, but its edge cases are real. The `__getitem__` fallback for `for` (Section 1), the subclass exception in operator dispatch (Section 6) and data versus non-data descriptors (Section 9) all have to be learned.
+
+This guide also leaves out two related topics: the method resolution order, which is how Python searches base classes under multiple inheritance, and metaclasses, which are classes whose instances are classes. For those and for more depth on the data model, see the "Data model" chapter of the Python Language Reference, the official Descriptor Guide, and Luciano Ramalho's *Fluent Python*.
+
+## 13. Epilogue: Why "Data Model"?
 
 The term comes from the title of the chapter in the official Python Language Reference that defines all of this. The core developers never wrote down why they chose it. What follows is an interpretation, but it fits the design well.
 
@@ -694,4 +722,4 @@ The term comes from the title of the chapter in the official Python Language Ref
 - **Interface** would suggest a thin boundary between components.
 - **Data Model** describes what kinds of things exist in the language and how they behave: a sequence, a number, an iterator, a callable, a descriptor. Python does not dictate how your algorithm is written. It only requires that your data declare what it is, so the C engine underneath knows how to run it.
 
-That is the whole secret of the elegance. The language is small, and your objects tell it the rest.
+That is the core of the design. The language stays small, and your objects tell it the rest.
