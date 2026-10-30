@@ -80,7 +80,101 @@ Decorators are a direct consequence of this pillar. `@njit` above a DSP function
 
 ### The Keystone: Descriptors
 
+Descriptors solve a practical problem that starts with ordinary attributes. Assignment creates an attribute on one object:
+
+```python
+class Car:
+    pass
+
+c = Car()
+c.color = "red"   # only this object has color
+```
+
+To give every object the attribute, set it in `__init__`. Each object still holds its own value:
+
+```python
+class Car:
+    def __init__(self, wheels=4):
+        self.wheels = wheels
+
+c = Car()
+c.wheels = -3     # accepted: none of your code runs
+```
+
+To run code on access, `property` handles a single attribute:
+
+```python
+class Car:
+    def __init__(self, wheels=4):
+        self.wheels = wheels      # goes through the setter
+
+    @property
+    def wheels(self):
+        return self._wheels
+
+    @wheels.setter
+    def wheels(self, value):
+        if value < 0:
+            raise ValueError("wheels must be non-negative")
+        self._wheels = value
+```
+
+If `doors` and `seats` need the same rule, this getter and setter must be repeated for each one. A descriptor holds the logic once, so any attribute of any class can reuse it.
+
 A **descriptor** is an object whose class defines `__get__`, `__set__` or `__delete__`. It takes effect only when it is stored as an attribute of another class. When you access that attribute, Python finds the descriptor on the class and lets it decide what happens.
+
+```python
+class NonNegative:
+    def __set_name__(self, owner, name):   # called once, when the class is built
+        self.private = "_" + name
+
+    def __get__(self, instance, owner=None):
+        if instance is None:               # accessed on the class itself
+            return self
+        return getattr(instance, self.private)
+
+    def __set__(self, instance, value):
+        if value < 0:
+            raise ValueError(f"{self.private[1:]} must be non-negative")
+        setattr(instance, self.private, value)
+
+class Car:
+    wheels = NonNegative()
+    doors = NonNegative()
+
+    def __init__(self, wheels=4, doors=4):
+        self.wheels = wheels               # goes through __set__
+        self.doors = doors
+
+c1 = Car(wheels=4)
+c2 = Car(wheels=6)
+print(c1.wheels, c2.wheels)   # 4 6
+c1.wheels = -3                # ValueError
+```
+
+`__get__` and `__set__` receive both `self` and `instance` because of where the descriptor lives. `Car` holds one `NonNegative` object for `wheels`, and every car shares it. `self` is that shared descriptor, and `instance` tells it which car is being accessed.
+
+The logic therefore belongs on the descriptor and the data belongs on the instance. Storing the value on `self` is the classic bug:
+
+```python
+class NonNegative:
+    def __get__(self, instance, owner=None):
+        return self.value            # bug: one value for all instances
+
+    def __set__(self, instance, value):
+        self.value = value           # bug: every car overwrites it
+
+class Car:
+    wheels = NonNegative()
+
+c1 = Car()
+c2 = Car()
+c1.wheels = 4
+c2.wheels = 6
+print(c1.wheels)                     # 6, not 4
+```
+
+A descriptor controls access through one name, but it does not make the data private. `c1._wheels = -3` skips the check in the working version. Python has no enforced equivalent of MATLAB's `Access = private` or `Access = protected`. A leading underscore is only a convention that says "internal, don't touch".
 
 This is where the two pillars meet. Functions are first-class objects, and every function object has a `__get__` method. That single fact is how methods work:
 
