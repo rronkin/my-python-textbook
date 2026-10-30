@@ -14,6 +14,8 @@ Found a mistake? [Open an issue](https://github.com/rronkin/my-python-textbook/i
 
 Python's keywords and operators are hardcoded in the grammar, like any language. But most of that syntax is defined as a call to a named method on the object. These methods are the "dunder" (Double UNDERscore) methods. A set of dunders that together give an object a capability is called a **protocol**.
 
+If you know operator overloading from C++ or MATLAB, think of dunder methods as that same idea extended beyond operators. Attribute access, `for` loops, `with` blocks and even class creation all call methods you can define.
+
 Python did not invent this. C++ and C# overload operators, and Ruby and Smalltalk go further by treating nearly every operation as a method call. Python's strength is how much of the language it brings under one documented set of protocols, and how little a class must declare to join in.
 
 So when the language needed to grow, its designers rarely added special cases. They added protocols.
