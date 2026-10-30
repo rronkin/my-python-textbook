@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>$title</title>
+  <meta name="description" content="$tagline">
+  <meta name="author" content="$author">
+  <meta property="og:title" content="$title">
+  <meta property="og:description" content="$tagline">
+  <meta property="og:type" content="article">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%232a5a8c'/%3E%3Cpath d='M9 8h8a5 5 0 0 1 0 10h-4v6H9z' fill='%23f5c84c'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="code.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="sidebar-title" href="#top">The Python Architecture</a>
+    <nav aria-label="Sections"><ol>$toc</ol></nav>
+    <a class="download" href="$pdf" download>Download PDF</a>
+    <p class="download-info">$pdf_info</p>
+  </aside>
+
+  <main id="top">
+    <header class="hero">
+      <h1>$title</h1>
+      <p class="tagline">$tagline</p>
+      <p class="byline">$byline</p>
+      <a class="download" href="$pdf" download>Download PDF</a>
+      <span class="download-info">$pdf_info</span>
+    </header>
+
+    <details class="mobile-toc">
+      <summary>Contents</summary>
+      <nav aria-label="Sections"><ol>$toc</ol></nav>
+    </details>
+
+    <article>
+$body
+    </article>
+
+    <footer>
+      <a class="download" href="$pdf" download>Download PDF</a>
+      <span class="download-info">$pdf_info</span>
+    </footer>
+  </main>
+
+  <script>
+    // Highlight the sidebar entry for the section being read.
+    const links = new Map(
+      [...document.querySelectorAll(".sidebar nav a")].map((a) => [a.hash.slice(1), a])
+    );
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          links.forEach((a) => a.removeAttribute("aria-current"));
+          links.get(entry.target.id)?.setAttribute("aria-current", "true");
+        }
+      },
+      { rootMargin: "0px 0px -80% 0px" }
+    );
+    links.forEach((_, id) => {
+      const heading = document.getElementById(id);
+      if (heading) observer.observe(heading);
+    });
+
+    // Close the phone contents list once a section is picked.
+    const mobileToc = document.querySelector(".mobile-toc");
+    mobileToc.addEventListener("click", (event) => {
+      if (event.target.closest("a")) mobileToc.open = false;
+    });
+  </script>
+</body>
+</html>

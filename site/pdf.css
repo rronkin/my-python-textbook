@@ -1,0 +1,122 @@
+@page {
+  size: A4;
+  margin: 24mm 20mm 22mm;
+
+  @top-right {
+    content: string(section);
+    color: #6b7078;
+    font: 8pt "Noto Sans", sans-serif;
+  }
+
+  @bottom-center {
+    content: counter(page);
+    color: #6b7078;
+    font: 9pt "Noto Sans", sans-serif;
+  }
+}
+
+@page :first {
+  @top-right { content: none; }
+}
+
+:root {
+  --ink: #1f2328;
+  --muted: #5d646d;
+  --rule: #d9d6cd;
+  --accent: #2a5a8c;
+  --code-bg: #f5f3ed;
+}
+
+body {
+  color: var(--ink);
+  font: 10.5pt/1.5 "Noto Serif", serif;
+}
+
+a { color: inherit; text-decoration: none; }
+
+.cover { margin: 14mm 0 10mm; }
+
+.cover h1 {
+  margin: 0;
+  font: 700 27pt/1.15 "Noto Sans", sans-serif;
+  letter-spacing: -0.01em;
+}
+
+.tagline { margin: 4mm 0 0; color: var(--muted); font-size: 13pt; font-style: italic; }
+.byline { margin: 3mm 0 0; color: var(--muted); font: 9.5pt "Noto Sans", sans-serif; }
+
+.toc { break-after: page; }
+
+.toc-title {
+  margin: 0 0 3mm;
+  padding-top: 6mm;
+  border-top: 0.5pt solid var(--rule);
+  bookmark-level: none;
+  string-set: none;
+}
+
+.toc ol { margin: 0; padding: 0; list-style: none; font: 10pt/1.3 "Noto Sans", sans-serif; }
+.toc li { margin-bottom: 2.2mm; }
+
+.toc a::after {
+  content: leader(".") target-counter(attr(href), page);
+  color: var(--muted);
+}
+
+h1, h2, h3 { break-after: avoid; }
+
+h2 {
+  margin: 9mm 0 3mm;
+  font: 700 15pt/1.25 "Noto Sans", sans-serif;
+  string-set: section content();
+}
+
+h3 { margin: 6mm 0 2mm; font: 600 11.5pt/1.3 "Noto Sans", sans-serif; }
+
+p, ul, ol { margin: 0 0 3mm; orphans: 3; widows: 3; }
+article ul, article ol, body > ul, body > ol { padding-left: 6mm; }
+li { margin-bottom: 1.2mm; }
+
+p > a, li > a { color: var(--accent); }
+
+code {
+  background: var(--code-bg);
+  font: 8.8pt "DejaVu Sans Mono", monospace;
+}
+
+.highlight {
+  margin: 0 0 4mm;
+  padding: 3mm 3.5mm;
+  background: var(--code-bg);
+  border-radius: 1mm;
+  break-inside: avoid;
+}
+
+.highlight pre {
+  margin: 0;
+  font: 8pt/1.45 "DejaVu Sans Mono", monospace;
+  white-space: pre-wrap;
+}
+
+.highlight code { background: none; font: inherit; }
+
+.table-wrap { margin: 0 0 4mm; }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font: 8.5pt/1.35 "Noto Sans", sans-serif;
+}
+
+thead { display: table-header-group; }
+tr { break-inside: avoid; }
+
+th, td {
+  padding: 1.4mm 1.8mm;
+  border-bottom: 0.5pt solid var(--rule);
+  text-align: left;
+  vertical-align: top;
+}
+
+th { border-bottom: 1pt solid var(--muted); font-weight: 600; }
+td code, th code { font-size: 7.6pt; overflow-wrap: break-word; }

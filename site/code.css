@@ -1,0 +1,36 @@
+/* Pygments tokens, shared by the site and the PDF. */
+:root {
+  --tok-keyword: #8a3ea8;
+  --tok-string: #2f7a3f;
+  --tok-comment: #6b7078;
+  --tok-number: #a8591c;
+  --tok-name: #2a5a8c;
+  --tok-dunder: #a3272c;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --tok-keyword: #d3a0ea;
+    --tok-string: #94cf9e;
+    --tok-comment: #8d939c;
+    --tok-number: #e5ae7c;
+    --tok-name: #8ab4e0;
+    --tok-dunder: #f0979a;
+  }
+}
+
+.highlight .k, .highlight .kc, .highlight .kd, .highlight .kn, .highlight .kp,
+.highlight .kr, .highlight .kt, .highlight .ow { color: var(--tok-keyword); }
+
+.highlight .s, .highlight .s1, .highlight .s2, .highlight .sa, .highlight .sb,
+.highlight .sc, .highlight .sd, .highlight .se, .highlight .si, .highlight .dl { color: var(--tok-string); }
+
+.highlight .c, .highlight .c1, .highlight .cm, .highlight .cp, .highlight .cpf,
+.highlight .cs { color: var(--tok-comment); font-style: italic; }
+
+.highlight .m, .highlight .mf, .highlight .mh, .highlight .mi, .highlight .mo { color: var(--tok-number); }
+
+.highlight .nf, .highlight .nc, .highlight .nb, .highlight .nd, .highlight .bp { color: var(--tok-name); }
+
+/* Dunders are the subject of the document, so they stand out. */
+.highlight .fm, .highlight .vm { color: var(--tok-dunder); }
