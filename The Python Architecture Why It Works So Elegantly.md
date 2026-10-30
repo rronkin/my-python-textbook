@@ -1,10 +1,12 @@
 # The Python Architecture: Why It Works So Elegantly
 
-Oct 27, 2026 · @Roee ronkin
+Oct 27, 2026 · @Roee Ronkin
 
 *From C-structs to elegant protocols in high-performance DSP.*
 
 Python's elegance comes from one design decision. The syntax is fixed, but what the syntax *does* is decided by your objects. Everything else in this document follows from that decision and from how CPython implements it.
+
+The code examples assume `import numpy as np`. Where they use `time` or CuPy, they also assume `import time` and `import cupy as cp`.
 
 ## 1. The Core Philosophy: Fixed Syntax, Pluggable Behavior
 
@@ -13,7 +15,7 @@ Python's keywords and operators are hardcoded in the grammar, like any language.
 So when the language needed to grow, its designers rarely added special cases. They added protocols.
 
 - **The `for` loop:** Python does not loop over arrays specifically. It says: "If an object has `__iter__()`, and the iterator it returns has `__next__()`, then `for` works on it." An **iterator** is an object that hands out items one at a time. Each call to `__next__()` returns the next item, and raising `StopIteration` signals the end.
-- **Context managers:** Python does not provide `try/finally` macros. It says: "If an object has `__enter__()` and `__exit__()`, it works with `with`."
+- **Context managers:** Python does not add a special statement for each kind of resource, such as files, locks or devices. It says: "If an object has `__enter__()` and `__exit__()`, it works with `with`."
 - **Arithmetic:** `a * b` is not a fixed machine operation. It is a request to `a.__mul__(b)`, with a defined fallback to `b.__rmul__(a)`.
 
 ### Example: two methods, eight features
@@ -174,7 +176,7 @@ c2.wheels = 6
 print(c1.wheels)                     # 6, not 4
 ```
 
-A descriptor controls access through one name, but it does not make the data private. `c1._wheels = -3` skips the check in the working version. Python has no enforced equivalent of MATLAB's `Access = private` or `Access = protected`. A leading underscore is only a convention that says "internal, don't touch".
+A descriptor controls access through one name, but it does not make the data private. `c1._wheels = -3` skips the check in the working version. Python has no enforced equivalent of MATLAB's `Access = private` or `Access = protected`. A leading underscore is only a convention that says "internal, don't touch". A leading double underscore, as in `self.__x`, triggers **name mangling**: Python renames the attribute to `_Car__x`. This prevents accidental clashes with subclass attributes. It is still not access control, because `c._Car__x` works.
 
 This is where the two pillars meet. Functions are first-class objects, and every function object has a `__get__` method. That single fact is how methods work:
 
@@ -201,7 +203,7 @@ Section 9 uses a descriptor to build MATLAB-style nontunable properties in about
 
 ### The Mortar: Namespaces
 
-Module globals, class bodies and ordinary instances store their names in dictionaries. You can see them with `vars(obj)`, and you can change them at runtime. This is what makes Python so malleable: a name is a string key that points to a first-class object.
+Module globals, class bodies and ordinary instances store their names in dictionaries. You can see them with `vars(obj)`, and you can change them at runtime. For a class, `vars()` returns a read-only view, so write with `setattr(cls, name, value)` instead. This is what makes Python so malleable: a name is a string key that points to a first-class object.
 
 ```python
 globals()["gain"] = 4.0   # write straight into the module's dict
@@ -235,9 +237,9 @@ filters = {"lpf": lpf, "hpf": hpf}   # functions stored in a dict
 y = filters[mode](x)                 # one chosen and called at runtime
 ```
 
-Many modern languages now have first-class *functions*. Python's distinction is that functions, classes, modules, methods and types are all first-class, and they are all the same kind of thing: a `PyObject`.
+Many modern languages now have first-class *functions*. In Python, functions, classes, modules, methods and types are all first-class, and they are all the same kind of thing: a `PyObject`. Python is not alone here. Smalltalk, Lisp, Ruby and JavaScript share this property. It is unusual among the languages DSP engineers typically use: C, C++, Java and MATLAB.
 
-### What is actually unique: `def` and `class` are executable statements
+### What sets Python apart from C, C++ and Java: `def` and `class` are executable statements
 
 In Python, `def` and `class` are not declarations read by a compiler. They are statements that *run*, and running them builds a new object at that moment.
 
@@ -296,7 +298,7 @@ This is deliberate. The interpreter can cache each type's sockets in fixed C slo
 
 In most plugin systems, a plugin must explicitly register itself. It imports an SDK base class or edits a configuration file. Python skips this step. The interpreter does not care what your class inherits from. If the right dunder exists on the type, the plugin works.
 
-The standard library takes this further. An **abstract base class** (ABC) is a class that defines an interface and is meant only to be inherited from. The ABCs in `collections.abc`, such as `Iterable`, `Sequence` and `Callable`, recognize objects by their methods alone:
+The standard library takes this further. An **abstract base class** (ABC) is a class that defines an interface and is meant only to be inherited from. The single-method ABCs in `collections.abc`, such as `Iterable`, `Sized`, `Container` and `Callable`, recognize objects by their methods alone:
 
 ```python
 from collections.abc import Iterable
@@ -348,6 +350,8 @@ The numeric protocol shows how carefully the design is balanced. For `a * b`, Py
 2. If `a` returns the special value `NotImplemented`, ask `b.__rmul__(a)`. The `r` stands for "reflected": `b` is on the right.
 3. If both decline, raise `TypeError`.
 
+There is one exception to the order. If `b`'s type is a subclass of `a`'s type and overrides `__rmul__`, Python asks `b` first. This lets a specialized subclass take control of mixed operations with its parent.
+
 Neither class needs to know about the other in advance. The smallest example:
 
 ```python
@@ -371,6 +375,8 @@ The `int` type was written decades before `Gain`, yet `3 * Gain(2)` works.
 NumPy arrays join the same negotiation, with one extra step. Extend the type check to arrays and add one line:
 
 ```python
+import numbers
+
 class Gain:
     __array_ufunc__ = None             # tell NumPy to defer to us (see below)
 
@@ -378,7 +384,7 @@ class Gain:
         self.g = g
 
     def __mul__(self, x):
-        if isinstance(x, (int, float, complex, np.ndarray)):
+        if isinstance(x, (numbers.Number, np.ndarray)):
             return self.g * x
         return NotImplemented
 
@@ -389,9 +395,11 @@ x * Gain(2)    # ndarray declines, then Gain.__rmul__ -> float array
 
 The `__array_ufunc__ = None` line matters in DSP code. A **ufunc** (universal function) is NumPy's name for an element-wise operation such as multiply, add or `exp`. `__array_ufunc__` is NumPy's own protocol for letting other objects take part in ufuncs.
 
+The type check uses `numbers.Number` instead of `(int, float, complex)`. NumPy scalars such as `np.float32` and `np.int64` do not inherit from Python's `float` and `int`. NumPy does register them with the `numbers` ABCs, so `numbers.Number` accepts them.
+
 Without the line, NumPy treats your `Gain` object as a scalar and **broadcasts** it. Broadcasting stretches the smaller operand to the shape of the larger one, then applies the operation element by element. `x * Gain(2)` then returns an array of dtype `object`, meaning an array of generic Python objects instead of numbers. It is slow and easy to miss. Setting `__array_ufunc__ = None` tells NumPy: "let the other operand handle this."
 
-### The golden rule of Pythonic code
+### Prefer protocols over invented method names
 
 If you are inventing a method name for something a Python keyword or built-in already does, use the protocol instead.
 
@@ -590,12 +598,19 @@ with DelayLine(delay=10) as delay_block:
         out = delay_block(sample)         # __call__ -> setup/reset once, then stepImpl
         oldest = delay_block[0]           # __getitem__
 
-    delay_block.delay = 5                 # AttributeError: 'delay' is nontunable
+    try:
+        delay_block.delay = 5             # locked while running
+    except AttributeError as err:
+        print(err)                        # 'delay' is nontunable; call release() first
 
 print(delay_block)                        # <DelayLine | State: Uninitialized>
 ```
 
 This code was run end to end. On a complex test stream, the output equals the input delayed by exactly 10 samples, with complex128 dtype inferred from the first sample.
+
+Without the `try`, the `AttributeError` would propagate out of the `with` block. `__exit__` would still release the block, but the final `print` would never run.
+
+This example processes one sample per call to keep the lifecycle easy to follow. In production code, pass a frame (a block of samples) to each call, as MATLAB System objects normally do. Per-sample calls hit the overhead wall described in Section 11.
 
 ## 10. IDE Integration and Essential Protocols: The Cheat Sheet
 
